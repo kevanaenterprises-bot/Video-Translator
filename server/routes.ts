@@ -66,10 +66,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── Auth routes ─────────────────────────────────────────────────────────────
   app.post("/api/auth/login", (req, res, next) => {
     passport.authenticate("local", (err: any, user: any, info: any) => {
-      if (err) return next(err);
+      if (err) {
+        console.error("Login error:", err);
+        return res.status(500).json({ error: err?.message || "Server error during login" });
+      }
       if (!user) return res.status(401).json({ error: info?.message || "Login failed" });
       req.logIn(user, (err) => {
-        if (err) return next(err);
+        if (err) {
+          console.error("Session error:", err);
+          return res.status(500).json({ error: err?.message || "Session error" });
+        }
         const { password, ...safeUser } = user;
         res.json({ user: safeUser });
       });
@@ -251,9 +257,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 });
 
-  app.get("/api/health", (req, res) => {
+  app.get("/api/health", async (req, res) => {
+    let dbStatus = "unknown";
+    let dbError = null;
+    let userCount = null;
+    try {
+      const users = await storage.listUsers();
+      userCount = users.length;
+      dbStatus = "ok";
+    } catch (err: any) {
+      dbStatus = "error";
+      dbError = err?.message || String(err);
+    }
     res.json({
       status: "ok",
+      db: dbStatus,
+      dbError,
+      userCount,
+      hasDb: !!process.env.DATABASE_URL,
       services: {
         translation: translationService.isConfigured(),
         speechRecognition: speechRecognitionService.isConfigured(),
