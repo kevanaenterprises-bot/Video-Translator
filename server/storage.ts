@@ -99,25 +99,62 @@ export interface IStorage {
 export class PgStorage implements IStorage {
   private db: ReturnType<typeof drizzle>;
 
-  constructor(pool: Pool) {
+  constructor(pool: typeof Pool.prototype) {
     this.db = drizzle(pool);
     this.ensureSchema().then(() => this.seedAdmin());
   }
 
   private async ensureSchema() {
-    const pool = (this.db as any).session?.client || null;
     try {
-      // Add new columns if they don't exist (safe migration)
+      // Ensure users table exists with all required columns
       await (this.db as any).execute(sql`
+        CREATE TABLE IF NOT EXISTS users (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          username TEXT NOT NULL UNIQUE,
+          password TEXT NOT NULL DEFAULT '',
+          display_name TEXT NOT NULL DEFAULT '',
+          role TEXT NOT NULL DEFAULT 'user',
+          language TEXT NOT NULL DEFAULT 'en',
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      // Safe migrations — add columns if missing
+      await (this.db as any).execute(sql`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT '';
         ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
         ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
         ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en';
         ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
       `);
-      console.log("✅ Schema columns verified");
+      // Ensure call_sessions table exists
+      await (this.db as any).execute(sql`
+        CREATE TABLE IF NOT EXISTS call_sessions (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          host_user_id VARCHAR NOT NULL,
+          guest_user_id VARCHAR,
+          status TEXT NOT NULL DEFAULT 'waiting',
+          created_at TIMESTAMP DEFAULT NOW(),
+          ended_at TIMESTAMP
+        );
+      `);
+      // Ensure translations table exists
+      await (this.db as any).execute(sql`
+        CREATE TABLE IF NOT EXISTS translations (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          session_id VARCHAR NOT NULL,
+          original_text TEXT NOT NULL,
+          translated_text TEXT NOT NULL,
+          source_language TEXT NOT NULL,
+          target_language TEXT NOT NULL,
+          speaker_id VARCHAR NOT NULL,
+          timestamp TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      console.log("✅ Schema verified");
     } catch (err) {
-      console.log("Schema already up to date");
+      console.error("Schema error:", err);
     }
   }
 
