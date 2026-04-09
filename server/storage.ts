@@ -98,16 +98,22 @@ export interface IStorage {
 // ── PostgreSQL Storage ────────────────────────────────────────────────────────
 export class PgStorage implements IStorage {
   private db: ReturnType<typeof drizzle>;
+  private pool: typeof Pool.prototype;
 
   constructor(pool: typeof Pool.prototype) {
+    this.pool = pool;
     this.db = drizzle(pool);
     this.ensureSchema().then(() => this.seedAdmin());
   }
 
+  private async runSQL(query: string): Promise<void> {
+    await this.pool.query(query);
+  }
+
   private async ensureSchema() {
     try {
-      // Ensure users table exists with all required columns
-      await (this.db as any).execute(sql`
+      // Create tables if they don't exist
+      await this.runSQL(`
         CREATE TABLE IF NOT EXISTS users (
           id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
           username TEXT NOT NULL UNIQUE,
@@ -117,19 +123,9 @@ export class PgStorage implements IStorage {
           language TEXT NOT NULL DEFAULT 'en',
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT NOW()
-        );
+        )
       `);
-      // Safe migrations — add columns if missing
-      await (this.db as any).execute(sql`
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT '';
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '';
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en';
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
-      `);
-      // Ensure call_sessions table exists
-      await (this.db as any).execute(sql`
+      await this.runSQL(`
         CREATE TABLE IF NOT EXISTS call_sessions (
           id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
           host_user_id VARCHAR NOT NULL,
@@ -137,10 +133,9 @@ export class PgStorage implements IStorage {
           status TEXT NOT NULL DEFAULT 'waiting',
           created_at TIMESTAMP DEFAULT NOW(),
           ended_at TIMESTAMP
-        );
+        )
       `);
-      // Ensure translations table exists
-      await (this.db as any).execute(sql`
+      await this.runSQL(`
         CREATE TABLE IF NOT EXISTS translations (
           id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
           session_id VARCHAR NOT NULL,
@@ -150,8 +145,20 @@ export class PgStorage implements IStorage {
           target_language TEXT NOT NULL,
           speaker_id VARCHAR NOT NULL,
           timestamp TIMESTAMP DEFAULT NOW()
-        );
+        )
       `);
+      // Safe column migrations — each one separate so one failure doesn't block others
+      const cols = [
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+      ];
+      for (const col of cols) {
+        try { await this.runSQL(col); } catch (_) { /* column already exists */ }
+      }
       console.log("✅ Schema verified");
     } catch (err) {
       console.error("Schema error:", err);
