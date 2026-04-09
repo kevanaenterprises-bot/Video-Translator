@@ -44,6 +44,7 @@ export interface InsertAppUser {
   displayName: string;
   role?: UserRole;
   language?: string;
+  email?: string;
 }
 
 // ── DB Schema (matches existing Railway tables) ───────────────────────────────

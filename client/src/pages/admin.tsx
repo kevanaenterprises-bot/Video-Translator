@@ -29,6 +29,7 @@ function AddUserModal({ onAdd, onClose }: { onAdd: () => void; onClose: () => vo
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [role, setRole] = useState("user");
   const [language, setLanguage] = useState("en");
   const [loading, setLoading] = useState(false);
@@ -41,11 +42,12 @@ function AddUserModal({ onAdd, onClose }: { onAdd: () => void; onClose: () => vo
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, displayName, password, role, language }),
+        body: JSON.stringify({ username, displayName, password, role, language, email }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast({ title: "User created!", description: `${displayName} can now log in.` });
+      const emailMsg = data.emailSent ? " A welcome email was sent with their credentials." : "";
+      toast({ title: "User created!", description: `${displayName} can now log in.${emailMsg}` });
       onAdd();
       onClose();
     } catch (err: any) {
@@ -75,6 +77,10 @@ function AddUserModal({ onAdd, onClose }: { onAdd: () => void; onClose: () => vo
             <div className="space-y-1">
               <label className="text-sm font-medium">Password</label>
               <Input type="password" placeholder="Assign a password..." value={password} onChange={e => setPassword(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Email <span className="text-muted-foreground font-normal">(optional — sends welcome email)</span></label>
+              <Input type="email" placeholder="dave@company.com" value={email} onChange={e => setEmail(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">

@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage, comparePasswords, hashPassword } from "./storage";
+import { sendWelcomeEmail } from "./services/email";
 import { translationService } from "./services/translation";
 import { speechRecognitionService } from "./services/speechRecognition";
 import { signalingMessageSchema, translationMessageSchema, insertCallSessionSchema } from "@shared/schema";
@@ -93,15 +94,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/users", requireAdmin, async (req, res) => {
     try {
-      const { username, password, displayName, role, language } = req.body;
+      const { username, password, displayName, role, language, email } = req.body;
       if (!username || !password || !displayName) {
         return res.status(400).json({ error: "username, password, and displayName are required" });
       }
       const existing = await storage.getUserByUsername(username);
       if (existing) return res.status(409).json({ error: "Username already taken" });
-      const user = await storage.createUser({ username, password, displayName, role: role || "user", language: language || "en" });
+      const user = await storage.createUser({ username, password, displayName, role: role || "user", language: language || "en", email });
       const { password: _, ...safeUser } = user;
-      res.json(safeUser);
+
+      // Send welcome email if address provided
+      let emailSent = false;
+      if (email) {
+        const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+        const result = await sendWelcomeEmail({ toEmail: email, toName: displayName, username, password, appUrl });
+        emailSent = result.success;
+      }
+
+      res.json({ ...safeUser, emailSent });
     } catch (err) {
       res.status(500).json({ error: "Failed to create user" });
     }
