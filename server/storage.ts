@@ -49,7 +49,7 @@ export interface InsertAppUser {
 }
 
 // ── DB Schema (matches existing Railway tables) ───────────────────────────────
-const usersTable = pgTable("users", {
+const usersTable = pgTable("speakeasy_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
@@ -114,7 +114,7 @@ export class PgStorage implements IStorage {
     try {
       // Create tables if they don't exist
       await this.runSQL(`
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE IF NOT EXISTS speakeasy_users (
           id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
           username TEXT NOT NULL UNIQUE,
           password TEXT NOT NULL DEFAULT '',
@@ -149,12 +149,12 @@ export class PgStorage implements IStorage {
       `);
       // Safe column migrations — each one separate so one failure doesn't block others
       const cols = [
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT ''`,
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT ''`,
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+        `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'`,
+        `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,
+        `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
+        `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
       ];
       for (const col of cols) {
         try { await this.runSQL(col); } catch (_) { /* column already exists */ }
