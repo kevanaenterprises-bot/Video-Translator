@@ -155,6 +155,13 @@ export class PgStorage implements IStorage {
         `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,
         `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`,
         `ALTER TABLE speakeasy_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP DEFAULT NOW()`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS session_id VARCHAR`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS original_text TEXT`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS translated_text TEXT`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS source_language TEXT`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS target_language TEXT`,
+        `ALTER TABLE translations ADD COLUMN IF NOT EXISTS speaker_id VARCHAR`,
       ];
       for (const col of cols) {
         try { await this.runSQL(col); } catch (_) { /* column already exists */ }

@@ -472,41 +472,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
             console.log('✅ Translation completed:', translationResult.translatedText);
 
-            // Store translation in database
-            console.log('💾 Storing translation in database');
-            await storage.createTranslation({
-              sessionId,
-              originalText: speechResult.transcript,
-              translatedText: translationResult.translatedText,
-              sourceLanguage: srcLang,
-              targetLanguage: tgtLang,
-              speakerId: speakerId,
-            });
-
-            // Broadcast translation result to all participants
-            // Use sessionId as roomId since they match
+            // Broadcast FIRST — don't let a DB failure block the user from seeing their translation
             const roomId = sessionId;
+            const resultMessage = {
+              type: 'translation',
+              data: {
+                type: 'translation-result',
+                originalText: speechResult.transcript,
+                translatedText: translationResult.translatedText,
+                sourceLanguage: srcLang,
+                targetLanguage: tgtLang,
+                confidence: speechResult.confidence,
+                speakerId: speakerId,
+              }
+            };
             if (rooms.has(roomId)) {
-              const resultMessage = {
-                type: 'translation',
-                data: {
-                  type: 'translation-result',
-                  originalText: speechResult.transcript,
-                  translatedText: translationResult.translatedText,
-                  sourceLanguage: srcLang,
-                  targetLanguage: tgtLang,
-                  confidence: speechResult.confidence,
-                  speakerId: speakerId,
-                }
-              };
-              
-              console.log('📡 Broadcasting translation result:', JSON.stringify(resultMessage, null, 2));
               broadcastToRoom(roomId, resultMessage);
-              
-              // Also send directly to the sender to ensure they see their own translation
-              ws.send(JSON.stringify(resultMessage));
-              console.log('✅ Translation broadcast completed');
-            } else {
+            }
+            ws.send(JSON.stringify(resultMessage));
+            console.log('✅ Translation broadcast completed');
+
+            // Store in DB separately — failure here won't affect the user
+            try {
+              await storage.createTranslation({
+                sessionId,
+                originalText: speechResult.transcript,
+                translatedText: translationResult.translatedText,
+                sourceLanguage: srcLang,
+                targetLanguage: tgtLang,
+                speakerId: speakerId,
+              });
+            } catch (dbErr) {
+              console.warn('⚠️ DB store failed (non-fatal):', (dbErr as any)?.message);
+            }
+
+            if (false) {
               console.error('❌ No room found for session:', sessionId);
             }
           }

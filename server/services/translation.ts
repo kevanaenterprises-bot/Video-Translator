@@ -89,47 +89,22 @@ export class TranslationService {
     translatedText: string;
     detectedSourceLanguage?: string;
   }> {
+    // Try MyMemory first (free, no API key, reliable)
     try {
-      console.log('🌐 Attempting LibreTranslate API call...');
-      const response = await fetch(this.libreEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          q: text,
-          source: sourceLanguage || 'auto',
-          target: targetLanguage,
-          format: 'text',
-        }),
-      });
-
-      console.log('📡 LibreTranslate response status:', response.status);
-
-      if (!response.ok) {
-        console.error('❌ LibreTranslate API error:', response.status, response.statusText);
-        throw new Error(`LibreTranslate API error: ${response.status} ${response.statusText}`);
+      const langPair = `${sourceLanguage || 'en'}|${targetLanguage}`;
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langPair}`;
+      console.log('🌐 Attempting MyMemory translation...');
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json() as any;
+        if (data.responseStatus === 200 && data.responseData?.translatedText) {
+          console.log('✅ MyMemory translation success');
+          return { translatedText: data.responseData.translatedText };
+        }
       }
-
-      const responseText = await response.text();
-      console.log('📄 LibreTranslate raw response:', responseText.substring(0, 200));
-
-      let data: LibreTranslateResponse;
-      try {
-        data = JSON.parse(responseText) as LibreTranslateResponse;
-      } catch (parseError) {
-        console.error('❌ Failed to parse LibreTranslate response as JSON');
-        throw new Error('LibreTranslate returned invalid JSON response');
-      }
-      
-      return {
-        translatedText: data.translatedText,
-        detectedSourceLanguage: data.detectedLanguage?.language,
-      };
+      throw new Error('MyMemory returned no result');
     } catch (error) {
-      console.error('❌ LibreTranslate API failed:', error);
-      // Fallback to a simple mock translation for demonstration
-      console.log('🔄 Using fallback translation...');
+      console.warn('⚠️ MyMemory failed, using fallback dictionary:', (error as any)?.message);
       return this.createFallbackTranslation(text, targetLanguage);
     }
   }
