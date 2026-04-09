@@ -5,22 +5,26 @@ interface UseWebRTCReturn {
   remoteStream: MediaStream | null;
   isConnected: boolean;
   connectionQuality: string;
+  partnerLanguage: string | null;
   joinRoom: () => void;
   leaveRoom: () => void;
   toggleMicrophone: () => void;
   toggleCamera: () => void;
 }
 
-export function useWebRTC(roomId: string): UseWebRTCReturn {
+export function useWebRTC(roomId: string, myLanguage?: string): UseWebRTCReturn {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState("Excellent");
-  
+  const [partnerLanguage, setPartnerLanguage] = useState<string | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const roleRef = useRef<string | null>(null);
+  const myLanguageRef = useRef<string | undefined>(myLanguage);
+  useEffect(() => { myLanguageRef.current = myLanguage; }, [myLanguage]);
 
   const initializeWebSocket = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -40,6 +44,11 @@ export function useWebRTC(roomId: string): UseWebRTCReturn {
         console.log("📩 WS message received:", message.type, message.data?.type);
         if (message.type === 'signaling') {
           await handleSignalingMessage(message.data);
+        } else if (message.type === 'language-announce') {
+          // Partner told us their language — update the display
+          if (message.language) {
+            setPartnerLanguage(message.language);
+          }
         }
       } catch (error) {
         console.error("WebSocket message error:", error);
@@ -410,6 +419,10 @@ export function useWebRTC(roomId: string): UseWebRTCReturn {
               data: null,
             }
           }));
+          // Announce our language to the room so the partner's display auto-updates
+          if (myLanguageRef.current) {
+            ws.send(JSON.stringify({ type: 'language-announce', language: myLanguageRef.current }));
+          }
         } else {
           console.error("WebSocket not ready when trying to send join-room message");
         }
@@ -495,6 +508,7 @@ export function useWebRTC(roomId: string): UseWebRTCReturn {
     remoteStream,
     isConnected,
     connectionQuality,
+    partnerLanguage,
     joinRoom,
     leaveRoom,
     toggleMicrophone,

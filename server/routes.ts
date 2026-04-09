@@ -307,6 +307,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const translationMsg = translationMessageSchema.parse(message.data);
           await handleTranslationMessage(ws, translationMsg);
         }
+
+        // Handle language announcements — broadcast to everyone else in the room
+        else if (message.type === 'language-announce') {
+          const roomId = connectionRooms.get(ws);
+          if (roomId) {
+            broadcastToRoom(roomId, { type: 'language-announce', language: message.language }, ws);
+          }
+        }
       } catch (error) {
         console.error('WebSocket message error:', error);
         ws.send(JSON.stringify({ type: 'error', message: 'Invalid message format' }));

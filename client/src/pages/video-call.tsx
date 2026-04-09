@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useTranslation } from "@/hooks/useTranslation";
-import { useLanguageSettings } from "@/hooks/useLanguageSettings";
+import { useLanguageSettings, SUPPORTED_LANGUAGES } from "@/hooks/useLanguageSettings";
 import VideoStream from "@/components/VideoStream";
 import CallControls from "@/components/CallControls";
 import SettingsModal from "@/components/SettingsModal";
@@ -25,16 +25,19 @@ export default function VideoCall() {
     return null;
   }
   
+  const { yourLanguage, partnerLanguage: savedPartnerLanguage, swapLanguages, updateLanguages } = useLanguageSettings();
+
   const {
     localStream,
     remoteStream,
     isConnected,
     connectionQuality,
+    partnerLanguage: detectedPartnerLanguage,
     joinRoom,
     leaveRoom,
     toggleMicrophone,
     toggleCamera,
-  } = useWebRTC(roomId);
+  } = useWebRTC(roomId, yourLanguage?.code); // announces our language to partner on join
 
   const {
     isTranslationActive,
@@ -43,7 +46,17 @@ export default function VideoCall() {
     isServiceAvailable,
   } = useTranslation(roomId);
 
-  const { yourLanguage, partnerLanguage, swapLanguages } = useLanguageSettings();
+  // If the partner announces their language over WebRTC, update our display automatically
+  useEffect(() => {
+    if (detectedPartnerLanguage) {
+      updateLanguages(yourLanguage.code, detectedPartnerLanguage);
+    }
+  }, [detectedPartnerLanguage]);
+
+  // Use detected partner language if available, otherwise fall back to saved setting
+  const partnerLanguage = detectedPartnerLanguage
+    ? (SUPPORTED_LANGUAGES.find((l) => l.code === detectedPartnerLanguage) || savedPartnerLanguage)
+    : savedPartnerLanguage;
 
   // Debug logging for translation state
   useEffect(() => {
