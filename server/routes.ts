@@ -287,9 +287,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WebSocket Server for WebRTC signaling and real-time communication
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  // Store active connections by room
+  // Store active connections by room (WebRTC signaling connections)
   const rooms = new Map<string, Set<WebSocket>>();
   const connectionRooms = new Map<WebSocket, string>();
+
+  // Separate map for translation WebSocket connections per room
+  // These are the WSs that listen for translation results
+  const translationRooms = new Map<string, Set<WebSocket>>();
+  const translationConnectionRooms = new Map<WebSocket, string>();
 
   wss.on('connection', (ws: WebSocket) => {
     console.log('New WebSocket connection');
@@ -313,6 +318,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Keepalive ping — just acknowledge silently
         else if (message.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong' }));
+        }
+
+        // Translation WS room registration — does NOT trigger WebRTC participant events
+        else if (message.type === 'translation-join') {
+          const { sessionId: tSessionId } = message;
+          if (tSessionId) {
+            if (!translationRooms.has(tSessionId)) {
+              translationRooms.set(tSessionId, new Set());
+            }
+            translationRooms.get(tSessionId)!.add(ws);
+            translationConnectionRooms.set(ws, tSessionId);
+            console.log(`🔗 Translation WS joined room ${tSessionId} (${translationRooms.get(tSessionId)?.size} translation connection(s))`);
+          }
         }
 
         // Handle language announcements — broadcast to everyone else in the room
@@ -390,10 +408,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }));
 
-            // Broadcast translation to others in the room
+            // Broadcast translation to partner's translation WS
             // Always use speakerId: 'remote' — from every recipient's perspective this is remote speech
-            if (rooms.has(roomId)) {
-              broadcastToRoom(roomId, {
+            const tRoom = translationRooms.get(roomId);
+            if (tRoom && tRoom.size > 0) {
+              const broadcastMsg = JSON.stringify({
                 type: 'translation',
                 data: {
                   type: 'translation-result',
@@ -403,10 +422,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   targetLanguage: tgtLang,
                   speakerId: 'remote',
                 }
-              }, ws);
-              console.log(`📡 Broadcast STT translation to room ${roomId} (${rooms.get(roomId)?.size ?? 0} participants)`);
+              });
+              let sent = 0;
+              tRoom.forEach(client => {
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                  client.send(broadcastMsg);
+                  sent++;
+                }
+              });
+              console.log(`📡 Broadcast STT translation to ${sent} partner(s) in room ${roomId}`);
             } else {
-              console.warn(`⚠️ Room ${roomId} not found for STT broadcast — is the WebRTC WS in the same room?`);
+              console.warn(`⚠️ No partner translation WS in room ${roomId} — partner may not have opened translation yet`);
             }
           } catch (err) {
             console.error('Translation after STT failed:', err);
@@ -419,16 +445,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
 
     ws.on('close', () => {
-      // Clean up room connections
+      // Clean up WebRTC signaling room connections
       const roomId = connectionRooms.get(ws);
       console.log(`🔌 WebSocket closing for room: ${roomId || 'unknown'}`);
-      
+
       if (roomId) {
         const room = rooms.get(roomId);
         if (room) {
           room.delete(ws);
           console.log(`👋 User left room ${roomId}. Remaining participants: ${room.size}`);
-          
+
           if (room.size === 0) {
             rooms.delete(roomId);
             console.log(`🗑️ Room ${roomId} deleted (empty)`);
@@ -447,7 +473,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         connectionRooms.delete(ws);
       }
-      console.log(`📊 After close - Active rooms: ${rooms.size}`);
+
+      // Clean up translation room connections
+      const tRoomId = translationConnectionRooms.get(ws);
+      if (tRoomId) {
+        const tRoom = translationRooms.get(tRoomId);
+        if (tRoom) {
+          tRoom.delete(ws);
+          if (tRoom.size === 0) translationRooms.delete(tRoomId);
+        }
+        translationConnectionRooms.delete(ws);
+      }
+
+      console.log(`📊 After close - Active rooms: ${rooms.size}, translation rooms: ${translationRooms.size}`);
     });
   });
 
@@ -583,10 +621,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 speakerId: speakerId,
               }
             };
-            if (rooms.has(roomId)) {
-              broadcastToRoom(roomId, resultMessage);
-            }
+            // Send to the speaker's own translation WS (so they see their local translation)
             ws.send(JSON.stringify(resultMessage));
+            // Broadcast the 'remote' version to all other translation WSs in the room
+            const tRoom2 = translationRooms.get(roomId);
+            if (tRoom2 && tRoom2.size > 0) {
+              const remoteMsg = JSON.stringify({
+                type: 'translation',
+                data: { ...resultMessage.data, speakerId: 'remote' }
+              });
+              tRoom2.forEach(client => {
+                if (client !== ws && client.readyState === WebSocket.OPEN) {
+                  client.send(remoteMsg);
+                }
+              });
+            }
             console.log('✅ Translation broadcast completed');
 
             // Store in DB separately — failure here won't affect the user

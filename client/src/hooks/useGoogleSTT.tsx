@@ -28,9 +28,7 @@ export function useGoogleSTT({
   onResult,
   isActive,
 }: UseGoogleSTTOptions) {
-  const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const sendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const chunkMimeRef = useRef<string>('');
 
@@ -135,26 +133,57 @@ export function useGoogleSTT({
     }
   }, [sessionId, wsRef]);
 
+  // Active flag so the restart loop knows when to stop
+  const activeRef = useRef(false);
+  // Captured audio stream (null = reusing WebRTC stream we don't own)
+  const capturedStreamRef = useRef<MediaStream | null>(null);
+
+  // ── One recording cycle: record for CHUNK_INTERVAL_MS, send, repeat ───────
+  const runCycle = useCallback(async (mimeType: string, stream: MediaStream) => {
+    if (!activeRef.current) return;
+
+    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      await sendChunk();
+      // Chain next cycle only if still active
+      if (activeRef.current) {
+        runCycle(mimeType, stream);
+      }
+    };
+
+    // Record for exactly CHUNK_INTERVAL_MS then stop — onstop triggers send + next cycle
+    recorder.start();
+    setTimeout(() => {
+      if (recorder.state === 'recording') recorder.stop();
+    }, CHUNK_INTERVAL_MS);
+  }, [sendChunk]);
+
   // ── Start recording ───────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     try {
-      // Prefer existing WebRTC stream — avoids double getUserMedia on iOS
-      // Read from ref so we always get the latest value (not the stale closure)
+      activeRef.current = true;
+
+      // Prefer existing WebRTC stream — avoids double getUserMedia on iOS/Safari
       const liveStream = localStreamRef.current;
       let stream: MediaStream;
       if (liveStream && liveStream.getAudioTracks().length > 0) {
         stream = new MediaStream(liveStream.getAudioTracks());
-        streamRef.current = null; // we don't own this stream — don't stop it
+        capturedStreamRef.current = null; // we don't own this — don't stop it
         console.log('🎙️ Reusing WebRTC audio track for STT');
       } else {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        streamRef.current = stream;
+        capturedStreamRef.current = stream;
         console.log('🎙️ Opened dedicated mic stream for STT');
       }
 
       // Determine best supported recording format
-      // Prefer WebM/OGG (Chrome/Firefox/Android) — send directly
-      // Fall back to MP4 (Safari macOS + iOS) — decode client-side
       const mimeType =
         MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
         : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
@@ -163,62 +192,41 @@ export function useGoogleSTT({
         : null;
 
       if (!mimeType) {
-        console.error('❌ No supported MediaRecorder MIME type found — STT unavailable');
+        console.error('❌ No supported MediaRecorder MIME type — STT unavailable');
+        activeRef.current = false;
         return;
       }
 
       chunkMimeRef.current = mimeType;
-      chunksRef.current = [];
+      console.log(`🎙️ Google STT starting (${mimeType}, ${CHUNK_INTERVAL_MS}ms cycles)`);
 
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      // Request a data chunk every CHUNK_INTERVAL_MS
-      // For WebM/OGG this gives us many small chunks that accumulate and are force-sent
-      // For MP4 (Safari) each chunk is a complete independently decodable segment
-      recorder.start(CHUNK_INTERVAL_MS);
-
-      // Send whatever has accumulated every CHUNK_INTERVAL_MS
-      sendIntervalRef.current = setInterval(() => {
-        sendChunk();
-      }, CHUNK_INTERVAL_MS);
-
-      console.log(`🎙️ Google STT recording started (${mimeType}, ${CHUNK_INTERVAL_MS}ms chunks)`);
+      // Kick off the first cycle — each cycle chains into the next via onstop
+      runCycle(mimeType, stream);
     } catch (err) {
       console.error('Failed to start Google STT recording:', err);
+      activeRef.current = false;
     }
-  }, [sendChunk]);
+  }, [runCycle]);
 
   // ── Stop recording ────────────────────────────────────────────────────────
   const stopRecording = useCallback(() => {
-    if (sendIntervalRef.current) {
-      clearInterval(sendIntervalRef.current);
-      sendIntervalRef.current = null;
-    }
+    // Signal the cycle chain to stop after the current recording finishes
+    activeRef.current = false;
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
     mediaRecorderRef.current = null;
 
-    // Flush remaining audio
-    sendChunk();
-
-    // Only stop tracks we opened ourselves
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+    // Only stop tracks we opened ourselves (not the shared WebRTC stream)
+    if (capturedStreamRef.current) {
+      capturedStreamRef.current.getTracks().forEach(t => t.stop());
+      capturedStreamRef.current = null;
     }
 
     chunksRef.current = [];
     console.log('🛑 Google STT recording stopped');
-  }, [sendChunk]);
+  }, []);
 
   useEffect(() => {
     if (isActive) {

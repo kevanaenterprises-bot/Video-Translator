@@ -104,6 +104,8 @@ export function useTranslation(sessionId: string, localStream?: MediaStream | nu
 
       ws.onopen = () => {
         console.log("Translation WebSocket connected for room:", sessionId);
+        // Register with the room so broadcastToRoom reaches this connection
+        ws.send(JSON.stringify({ type: 'translation-join', sessionId }));
         // Keepalive ping every 20s to prevent proxy timeouts during silence
         if (heartbeatTimer) clearInterval(heartbeatTimer);
         heartbeatTimer = setInterval(() => {
