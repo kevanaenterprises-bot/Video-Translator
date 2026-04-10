@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useSpeechRecognition } from "./useSpeechRecognition";
+import { useGoogleSTT } from "./useGoogleSTT";
 import { useLanguageSettings, SUPPORTED_LANGUAGES } from "./useLanguageSettings";
 
 interface TranslationResult {
@@ -39,31 +40,49 @@ export function useTranslation(sessionId: string): UseTranslationReturn {
   useEffect(() => { partnerLanguageRef.current = partnerLanguage; }, [partnerLanguage]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const [useGoogleSTTMode, setUseGoogleSTTMode] = useState(false);
   const { startListening, stopListening, isListening } = useSpeechRecognition();
 
-  // Check service availability
+  // Check service availability and whether Google STT is enabled on the server
   useEffect(() => {
     const checkServices = async () => {
       try {
         const response = await fetch('/api/health');
         if (response.ok) {
           const data = await response.json();
-          console.log("Health check response:", data);
-          setIsServiceAvailable(data.services.translation && data.services.speechRecognition);
+          const googleSTTEnabled = !!data.googleSTT;
+          setUseGoogleSTTMode(googleSTTEnabled);
+          if (googleSTTEnabled) {
+            console.log('✅ Google STT available — using server-side speech recognition');
+          } else {
+            console.log('ℹ️ Google STT not configured — using browser Web Speech API');
+          }
+          setIsServiceAvailable(true);
         } else {
-          console.error("Health check failed with status:", response.status);
           setIsServiceAvailable(false);
         }
       } catch (error) {
         console.error("Service check failed:", error);
-        // Since the backend is working (from the logs), let's enable it anyway
-        console.log("Enabling translation services anyway - backend is running");
         setIsServiceAvailable(true);
       }
     };
 
     checkServices();
   }, []);
+
+  // Google STT hook — active only when isTranslationActive and Google STT mode is on
+  useGoogleSTT({
+    languageCode: yourLanguageRef.current?.speechCode || 'en-US',
+    targetLanguage: partnerLanguageRef.current?.code || 'en',
+    sessionId,
+    wsRef,
+    isActive: isTranslationActive && useGoogleSTTMode,
+    onInterim: (text) => setInterimText(text),
+    onResult: (transcript, confidence) => {
+      // Google STT result comes back via 'stt-result' WebSocket message
+      // which is handled in the WS onmessage handler below
+    },
+  });
 
   // Initialize WebSocket for translation messages
   useEffect(() => {
@@ -80,12 +99,13 @@ export function useTranslation(sessionId: string): UseTranslationReturn {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        console.log("📩 WebSocket message received:", message);
-        
+
         if (message.type === 'translation') {
           handleTranslationMessage(message.data);
-        } else {
-          console.log("📭 Non-translation message:", message.type);
+        } else if (message.type === 'stt-result') {
+          // Google STT transcript confirmed — show as interim cleared
+          setInterimText('');
+          console.log(`🎙️ STT confirmed: "${message.transcript}" (${Math.round(message.confidence * 100)}%)`);
         }
       } catch (error) {
         console.error("❌ Translation WebSocket message error:", error);
@@ -98,8 +118,9 @@ export function useTranslation(sessionId: string): UseTranslationReturn {
 
     wsRef.current = ws;
 
-    // Listen for speech recognition events
+    // Listen for speech recognition events (Web Speech API — only when Google STT is not active)
     const handleSpeechRecognized = (event: any) => {
+      if (useGoogleSTTMode) return; // Google STT handles this instead
       const { text, confidence, isFinal } = event.detail;
 
       if (!isFinal) {

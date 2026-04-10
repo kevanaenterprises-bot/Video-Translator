@@ -5,6 +5,7 @@ import { storage, comparePasswords, hashPassword } from "./storage";
 import { sendWelcomeEmail } from "./services/email";
 import { translationService } from "./services/translation";
 import { speechRecognitionService } from "./services/speechRecognition";
+import { speechToTextService } from "./services/speechToText";
 import { signalingMessageSchema, translationMessageSchema, insertCallSessionSchema } from "@shared/schema";
 import { z } from "zod";
 import session from "express-session";
@@ -278,7 +279,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       services: {
         translation: translationService.isConfigured(),
         speechRecognition: speechRecognitionService.isConfigured(),
-      }
+      },
+      googleSTT: speechToTextService.isConfigured(),
     });
   });
 
@@ -313,6 +315,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const roomId = connectionRooms.get(ws);
           if (roomId) {
             broadcastToRoom(roomId, { type: 'language-announce', language: message.language }, ws);
+          }
+        }
+
+        // Handle Google STT audio chunks from the browser
+        else if (message.type === 'audio-chunk') {
+          if (!speechToTextService.isConfigured()) {
+            // Google STT not available — client should fall back to Web Speech API
+            return;
+          }
+          const { audioBase64, languageCode, sessionId, speakerId } = message;
+          if (!audioBase64 || !languageCode || !sessionId) return;
+
+          const audioBuffer = Buffer.from(audioBase64, 'base64');
+          const result = await speechToTextService.transcribe(audioBuffer, languageCode);
+
+          if (!result?.transcript?.trim()) return;
+
+          console.log(`🎙️ Google STT [${languageCode}]: "${result.transcript}"`);
+
+          // Determine target language — find the other participant's language
+          const roomId = connectionRooms.get(ws);
+          const targetLanguage = message.targetLanguage || 'en';
+
+          // If same language, just echo the transcript back (no translation needed)
+          if (languageCode.split('-')[0] === targetLanguage) {
+            ws.send(JSON.stringify({
+              type: 'stt-result',
+              transcript: result.transcript,
+              confidence: result.confidence,
+              languageCode,
+            }));
+            return;
+          }
+
+          // Translate
+          try {
+            const translation = await translationService.translateText(
+              result.transcript,
+              targetLanguage,
+              languageCode.split('-')[0]
+            );
+
+            // Send transcript back to the speaker
+            ws.send(JSON.stringify({
+              type: 'stt-result',
+              transcript: result.transcript,
+              confidence: result.confidence,
+              languageCode,
+            }));
+
+            // Broadcast translation to the room
+            if (roomId) {
+              broadcastToRoom(roomId, {
+                type: 'translation',
+                data: {
+                  type: 'translation-result',
+                  originalText: result.transcript,
+                  translatedText: translation.translatedText,
+                  sourceLanguage: languageCode.split('-')[0],
+                  targetLanguage,
+                  speakerId: speakerId || 'remote',
+                }
+              }, ws);
+
+              // Also send to self (local display)
+              ws.send(JSON.stringify({
+                type: 'translation',
+                data: {
+                  type: 'translation-result',
+                  originalText: result.transcript,
+                  translatedText: translation.translatedText,
+                  sourceLanguage: languageCode.split('-')[0],
+                  targetLanguage,
+                  speakerId: 'local',
+                }
+              }));
+            }
+          } catch (err) {
+            console.error('Translation after STT failed:', err);
           }
         }
       } catch (error) {
