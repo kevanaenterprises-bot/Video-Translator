@@ -126,13 +126,28 @@ export function useGoogleSTT({
     }));
   }, [sessionId, wsRef]);
 
-  const startAudioContextRecording = useCallback((stream: MediaStream) => {
-    const SAMPLE_RATE = 16000;
-    const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const startAudioContextRecording = useCallback(async (stream: MediaStream) => {
+    // Don't specify sampleRate — iOS Safari may not support 16kHz and silently ignores it
+    const ctx = new AudioContext();
     audioContextRef.current = ctx;
+
+    // iOS Safari creates AudioContext in "suspended" state until resumed
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+        console.log('🔊 AudioContext resumed from suspended state');
+      } catch (e) {
+        console.error('AudioContext resume failed:', e);
+      }
+    }
+
+    // Use the actual sample rate the device chose (may differ from requested)
+    const SAMPLE_RATE = ctx.sampleRate;
     sampleRateRef.current = SAMPLE_RATE;
     usingAudioContextRef.current = true;
     pcmBufferRef.current = [];
+
+    console.log(`🔊 AudioContext state: ${ctx.state}, actual sampleRate: ${SAMPLE_RATE}Hz`);
 
     const source = ctx.createMediaStreamSource(stream);
     // ScriptProcessor is deprecated but still works on iOS Safari
@@ -156,7 +171,12 @@ export function useGoogleSTT({
     };
 
     source.connect(processor);
-    processor.connect(ctx.destination);
+    // Use a muted gain node instead of connecting directly to destination
+    // This keeps the audio graph active (required for ScriptProcessorNode) without feedback
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 0;
+    processor.connect(gainNode);
+    gainNode.connect(ctx.destination);
 
     // Send accumulated speech every IOS_SEND_INTERVAL_MS — never accumulate more than this
     iosSendIntervalRef.current = setInterval(() => {

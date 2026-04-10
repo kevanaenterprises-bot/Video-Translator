@@ -46,6 +46,7 @@ export default function VideoCall() {
     interimText,
     toggleTranslation,
     isServiceAvailable,
+    useGoogleSTTMode,
   } = useTranslation(roomId);
 
   // Use saved partner language — manual selection takes priority over auto-detect
@@ -166,6 +167,11 @@ export default function VideoCall() {
               <span className="text-muted-foreground" data-testid="translation-status">
                 {isTranslationActive ? 'Translation Active' : 'Translation Inactive'}
               </span>
+              {isTranslationActive && (
+                <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${useGoogleSTTMode ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                  {useGoogleSTTMode ? 'Google STT' : 'Web Speech'}
+                </span>
+              )}
             </div>
           </div>
           

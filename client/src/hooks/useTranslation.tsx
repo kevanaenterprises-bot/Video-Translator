@@ -24,6 +24,7 @@ interface UseTranslationReturn {
   interimText: string;
   toggleTranslation: () => void;
   isServiceAvailable: boolean;
+  useGoogleSTTMode: boolean;
 }
 
 export function useTranslation(sessionId: string): UseTranslationReturn {
@@ -310,5 +311,6 @@ export function useTranslation(sessionId: string): UseTranslationReturn {
     interimText,
     toggleTranslation,
     isServiceAvailable,
+    useGoogleSTTMode,
   };
 }
