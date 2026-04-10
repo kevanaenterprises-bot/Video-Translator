@@ -71,9 +71,10 @@ export function useTranslation(sessionId: string): UseTranslationReturn {
   }, []);
 
   // Google STT hook — active only when isTranslationActive and Google STT mode is on
+  // Pass live state values (not refs) so dropdown changes propagate immediately via re-render
   useGoogleSTT({
-    languageCode: yourLanguageRef.current?.speechCode || 'en-US',
-    targetLanguage: partnerLanguageRef.current?.code || 'en',
+    languageCode: yourLanguage?.speechCode || 'en-US',
+    targetLanguage: partnerLanguage?.code || 'en',
     sessionId,
     wsRef,
     isActive: isTranslationActive && useGoogleSTTMode,

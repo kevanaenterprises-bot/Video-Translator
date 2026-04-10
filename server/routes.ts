@@ -329,11 +329,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Google STT not available — client should fall back to Web Speech API
             return;
           }
-          const { audioBase64, languageCode, sessionId, speakerId, targetLanguage } = message;
+          const { audioBase64, languageCode, sessionId, speakerId, targetLanguage, encoding, sampleRate } = message;
           if (!audioBase64 || !languageCode || !sessionId) return;
 
+          // encoding and sampleRate come from the client based on what MediaRecorder supports
+          // Chrome/Android: WEBM_OPUS @ 48000, iOS Safari: LINEAR16 @ 16000
           const audioBuffer = Buffer.from(audioBase64, 'base64');
-          const result = await speechToTextService.transcribe(audioBuffer, languageCode);
+          const result = await speechToTextService.transcribe(
+            audioBuffer,
+            languageCode,
+            encoding || 'WEBM_OPUS',
+            sampleRate || 48000
+          );
 
           if (!result?.transcript?.trim()) return;
 
