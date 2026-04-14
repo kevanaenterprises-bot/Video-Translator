@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Build the frontend from client/ folder (matches railway.toml config)
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 # Copy client/ source
 COPY client/ ./client/
