@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,20 +24,58 @@ const LANGUAGES: Record<string, { name: string; flag: string }> = {
   th: { name: "Thai", flag: "🇹🇭" },
 };
 
+// UI Text for guests — translated to their language
+const UI_TEXT: Record<string, Record<string, string>> = {
+  vi: {
+    'You\'ve been invited to a call': 'Bạn đã được mời tham gia cuộc gọi',
+    'Enter your name and language to join — no account needed': 'Nhập tên và ngôn ngữ của bạn để tham gia — không cần tài khoản',
+    'Room Code': 'Mã phòng',
+    'Your Name': 'Tên của bạn',
+    'How should we call you?': 'Chúng tôi gọi bạn là gì?',
+    'Your Language': 'Ngôn ngữ của bạn',
+    'Join Call →': 'Tham gia cuộc gọi →',
+    'Have a SpeakEasy account?': 'Có tài khoản SpeakEasy?',
+    'Sign in instead': 'Đăng nhập thay vì thế',
+  },
+  // Add more languages as needed
+};
+
 export default function GuestJoin() {
   const { roomId } = useParams<{ roomId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [name, setName] = useState("");
-  const [language, setLanguage] = useState("en");
+  // Default to Vietnamese if no preference — can be changed
+  const [language, setLanguage] = useState("vi");
+
+  // Get UI text in the selected language (default to English if not available)
+  const getText = (key: string): string => {
+    return UI_TEXT[language]?.[key] || key;
+  };
+
+  // Try to auto-detect guest's language from their browser/contact info
+  useEffect(() => {
+    // Check if there's a guest language saved locally
+    const savedGuest = localStorage.getItem('speakeasy-guest');
+    if (savedGuest) {
+      try {
+        const parsed = JSON.parse(savedGuest);
+        if (parsed.language) {
+          setLanguage(parsed.language);
+        }
+      } catch {}
+    }
+  }, []);
 
   const handleJoin = () => {
     if (!name.trim()) {
-      toast({ title: "Enter your name", description: "We need your name so the other person knows who joined.", variant: "destructive" });
+      const errMsg = getText("Enter your name") || "Enter your name";
+      toast({ title: errMsg, description: "We need your name so the other person knows who joined.", variant: "destructive" });
       return;
     }
     // Store guest info locally so the call page can use it
     localStorage.setItem("speakeasy-guest", JSON.stringify({ displayName: name.trim(), language, isGuest: true }));
+    // Save settings for the call page
     localStorage.setItem("speakeasy-settings", JSON.stringify({ yourLanguage: language, partnerLanguage: "en" }));
     navigate(`/call/${roomId}`);
   };

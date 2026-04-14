@@ -273,6 +273,29 @@ export default function Home() {
     localStorage.setItem(STORAGE_KEYS.isHost, "false");
   };
 
+  // Update languages when a contact is selected to call — auto-populate invitee's language
+  const selectContactForCall = (contact: Contact) => {
+    // Pre-set the caller's language to their saved language
+    const userLang = currentUser?.language || 'en';
+    // Pre-set the partner's language from the contact
+    const partnerLang = contact.language;
+    // Save these as defaults for the call page
+    const settings = { yourLanguage: userLang, partnerLanguage: partnerLang };
+    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+    // Also pre-set the room ID if not set
+    if (!roomId.trim()) {
+      const newRoomId = `room-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      setRoomId(newRoomId);
+      setIsHost(true);
+      localStorage.setItem(STORAGE_KEYS.roomId, newRoomId);
+      localStorage.setItem(STORAGE_KEYS.isHost, "true");
+      // Navigate directly to call after a brief moment
+      setTimeout(() => navigate(`/call/${newRoomId}`), 100);
+    } else {
+      navigate(`/call/${roomId}`);
+    }
+  };
+
   const copyRoomId = () => {
     if (roomId.trim()) {
       navigator.clipboard.writeText(roomId);
@@ -476,6 +499,15 @@ export default function Home() {
                           title={`Share room code in ${LANGUAGES[contact.language]?.name}`}
                         >
                           {contact.phone ? <MessageSquare className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="default"
+                          className="w-8 h-8"
+                          onClick={() => selectContactForCall(contact)}
+                          title={`Call ${contact.name}`}
+                        >
+                          <Phone className="w-4 h-4" />
                         </Button>
                         <Button
                           size="icon"
