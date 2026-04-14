@@ -10,6 +10,7 @@ RUN npm install --legacy-peer-deps --ignore-scripts
 COPY client/ ./client/
 COPY attached_assets/ ./attached_assets/
 COPY public/ ./public/
+COPY server/ ./server/
 COPY vite.config.ts ./
 COPY tailwind.config.ts ./
 COPY postcss.config.js ./
