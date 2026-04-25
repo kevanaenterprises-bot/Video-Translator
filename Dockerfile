@@ -10,6 +10,7 @@ COPY client/ ./client/
 COPY attached_assets/ ./attached_assets/
 COPY public/ ./public/
 COPY server/ ./server/
+COPY shared/ ./shared/
 COPY vite.config.ts ./
 COPY tailwind.config.ts ./
 COPY postcss.config.js ./
