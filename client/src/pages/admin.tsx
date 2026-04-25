@@ -58,8 +58,8 @@ function AddUserModal({ onAdd, onClose }: { onAdd: () => void; onClose: () => vo
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-sm" style={{ backgroundColor: 'white' }}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Add New User</CardTitle>
           <CardDescription>Create a SpeakEasy account for a team member</CardDescription>
@@ -143,8 +143,8 @@ function ResetPasswordModal({ user, onClose }: { user: AppUser; onClose: () => v
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-sm" style={{ backgroundColor: 'white' }}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><KeyRound className="w-5 h-5" /> Reset Password</CardTitle>
           <CardDescription>Set a new password for <strong>{user.displayName}</strong></CardDescription>

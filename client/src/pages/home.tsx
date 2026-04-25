@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import turtleLogo from "@assets/generated_images/Girl_turtle_talking_on_phone_d147f854.png";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Phone, Users, Heart, Shuffle, Copy, UserCircle, BookUser, Plus, Trash2, Share2, LogOut, MessageSquare, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
+import { Phone, Users, Heart, Shuffle, Copy, UserCircle, BookUser, Plus, Trash2, Share2, LogOut, MessageSquare, ShieldCheck, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // ── Language configs ──────────────────────────────────────────────────────────
@@ -215,6 +215,59 @@ function AddContactModal({ onAdd, onClose }: { onAdd: (c: Contact) => void; onCl
   );
 }
 
+// ── Edit Contact Modal ─────────────────────────────────────────────────────────
+function EditContactModal({ contact, onSave, onClose }: { contact: Contact; onSave: (c: Contact) => void; onClose: () => void }) {
+  const [name, setName] = useState(contact.name);
+  const [phone, setPhone] = useState(contact.phone);
+  const [language, setLanguage] = useState(contact.language);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) {
+      onSave({ ...contact, name: name.trim(), phone: phone.trim(), language });
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-sm" style={{ backgroundColor: 'white' }}>
+        <CardHeader>
+          <CardTitle>Edit Contact</CardTitle>
+          <CardDescription>Update {contact.name}'s info</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Name</label>
+              <Input placeholder="Contact name..." value={name} onChange={e => setName(e.target.value)} autoFocus />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Phone (for SMS sharing)</label>
+              <Input placeholder="+1 (555) 000-0000" value={phone} onChange={e => setPhone(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Their Language</label>
+              <Select value={language} onValueChange={setLanguage}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(LANGUAGES).map(([code, lang]) => (
+                    <SelectItem key={code} value={code}>{lang.flag} {lang.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button type="button" variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+              <Button type="submit" className="flex-1" disabled={!name.trim()}>Save Changes</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── Main Home Screen ───────────────────────────────────────────────────────────
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; displayName: string; role: string; language: string; isActive: boolean } | null>(null);
@@ -223,6 +276,7 @@ export default function Home() {
   const [isHost, setIsHost] = useState(false);
   const [showPhonebook, setShowPhonebook] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -347,6 +401,13 @@ export default function Home() {
     if (currentUser) localStorage.setItem(`${STORAGE_KEYS.contacts}-${currentUser.id}`, JSON.stringify(updated));
   };
 
+  const updateContact = (updated: Contact) => {
+    const updatedList = contacts.map(c => c.id === updated.id ? updated : c);
+    setContacts(updatedList);
+    if (currentUser) localStorage.setItem(`${STORAGE_KEYS.contacts}-${currentUser.id}`, JSON.stringify(updatedList));
+    toast({ title: "Contact updated!", description: `${updated.name} has been saved.` });
+  };
+
   const saveLanguageAndNavigate = (targetRoomId: string) => {
     const existing = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.settings) || '{}'); } catch { return {}; } })();
     const settings = { yourLanguage: currentUser?.language || 'en', partnerLanguage: existing.partnerLanguage || 'en' };
@@ -370,9 +431,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50 dark:from-gray-900 dark:to-gray-800">
-      {/* Add Contact Modal */}
       {showAddContact && (
         <AddContactModal onAdd={addContact} onClose={() => setShowAddContact(false)} />
+      )}
+      {editingContact && (
+        <EditContactModal contact={editingContact} onSave={updateContact} onClose={() => setEditingContact(null)} />
       )}
 
       <div className="max-w-md mx-auto p-6">
@@ -532,6 +595,15 @@ export default function Home() {
                           title={`Call ${contact.name}`}
                         >
                           <Phone className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="w-8 h-8"
+                          onClick={() => setEditingContact(contact)}
+                          title="Edit contact"
+                        >
+                          <Pencil className="w-4 h-4" />
                         </Button>
                         <Button
                           size="icon"

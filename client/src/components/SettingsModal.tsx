@@ -47,7 +47,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-md" data-testid="settings-modal">
+      <DialogContent className="w-full max-w-md" style={{ backgroundColor: 'white' }} data-testid="settings-modal">
         <DialogHeader>
           <DialogTitle data-testid="text-settings-title">Translation Settings</DialogTitle>
         </DialogHeader>
