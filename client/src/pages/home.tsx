@@ -309,8 +309,15 @@ export default function Home() {
       return;
     }
     const appUrl = window.location.origin;
+    const myLang = currentUser?.language || 'en';
+    // Embed language hints so the guest's join page pre-fills both dropdowns
+    const joinUrl = `${appUrl}/join/${roomId}?hostLang=${myLang}&guestLang=${contact.language}`;
     const langFn = SHARE_INSTRUCTIONS[contact.language] || SHARE_INSTRUCTIONS.en;
-    const message = langFn(roomId, appUrl);
+    // Pass the enhanced URL with lang params to the share message
+    const message = langFn(roomId, appUrl).replace(
+      `${appUrl}/join/${roomId}`,
+      joinUrl
+    );
 
     if (contact.phone) {
       // Copy to clipboard first so user has it regardless
@@ -339,7 +346,8 @@ export default function Home() {
   };
 
   const saveLanguageAndNavigate = (targetRoomId: string) => {
-    const settings = { yourLanguage: currentUser?.language || 'en', partnerLanguage: 'vi' };
+    const existing = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.settings) || '{}'); } catch { return {}; } })();
+    const settings = { yourLanguage: currentUser?.language || 'en', partnerLanguage: existing.partnerLanguage || 'en' };
     localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
     navigate(`/call/${targetRoomId}`);
   };

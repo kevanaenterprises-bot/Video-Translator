@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export interface Language {
   code: string;
@@ -29,48 +29,29 @@ interface LanguageSettings {
   partnerLanguage: string;
 }
 
-export const useLanguageSettings = () => {
-  const [settings, setSettings] = useState<LanguageSettings>({
-    yourLanguage: "en",
-    partnerLanguage: "en",
-  });
-
-  // Load settings from localStorage on mount
-  useEffect(() => {
+function loadSettings(): LanguageSettings {
+  try {
     const saved = localStorage.getItem('speakeasy-settings');
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.yourLanguage && parsed.partnerLanguage) {
-          setSettings({
-            yourLanguage: parsed.yourLanguage,
-            partnerLanguage: parsed.partnerLanguage,
-          });
-        }
-      } catch (error) {
-        console.error('Error loading language settings:', error);
-      }
+      const parsed = JSON.parse(saved);
+      if (parsed.yourLanguage && parsed.partnerLanguage) return parsed;
     }
-  }, []);
+  } catch {}
+  return { yourLanguage: 'en', partnerLanguage: 'en' };
+}
 
-  // Save settings to localStorage whenever they change
+export const useLanguageSettings = () => {
+  // Lazy initializer reads from storage synchronously so the first render
+  // already has the correct values — prevents the save effect from
+  // overwriting contact-selected languages with defaults.
+  const [settings, setSettings] = useState<LanguageSettings>(loadSettings);
+  const isFirstRender = useRef(true);
+
+  // Persist whenever settings change, but skip the very first render so we
+  // don't clobber what home.tsx wrote just before navigating here.
   useEffect(() => {
-    const currentSettings = localStorage.getItem('speakeasy-settings');
-    if (currentSettings) {
-      try {
-        const parsed = JSON.parse(currentSettings);
-        const updated = {
-          ...parsed,
-          yourLanguage: settings.yourLanguage,
-          partnerLanguage: settings.partnerLanguage,
-        };
-        localStorage.setItem('speakeasy-settings', JSON.stringify(updated));
-      } catch (error) {
-        localStorage.setItem('speakeasy-settings', JSON.stringify(settings));
-      }
-    } else {
-      localStorage.setItem('speakeasy-settings', JSON.stringify(settings));
-    }
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    localStorage.setItem('speakeasy-settings', JSON.stringify(settings));
   }, [settings]);
 
   const getLanguage = (code: string): Language => {

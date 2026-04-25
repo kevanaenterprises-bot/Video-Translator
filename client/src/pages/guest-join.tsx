@@ -45,27 +45,26 @@ export default function GuestJoin() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [name, setName] = useState("");
-  // Default to Vietnamese if no preference — can be changed
-  const [language, setLanguage] = useState("vi");
+
+  // Read language hints from the join URL (?hostLang=en&guestLang=vi)
+  const searchParams = new URLSearchParams(window.location.search);
+  const hostLang = searchParams.get('hostLang') || 'en';
+  const suggestedGuestLang = searchParams.get('guestLang');
+
+  const [language, setLanguage] = useState(() => {
+    // Priority: URL param → saved guest pref → fallback 'en'
+    if (suggestedGuestLang && LANGUAGES[suggestedGuestLang]) return suggestedGuestLang;
+    try {
+      const saved = JSON.parse(localStorage.getItem('speakeasy-guest') || '{}');
+      if (saved.language && LANGUAGES[saved.language]) return saved.language;
+    } catch {}
+    return 'en';
+  });
 
   // Get UI text in the selected language (default to English if not available)
   const getText = (key: string): string => {
     return UI_TEXT[language]?.[key] || key;
   };
-
-  // Try to auto-detect guest's language from their browser/contact info
-  useEffect(() => {
-    // Check if there's a guest language saved locally
-    const savedGuest = localStorage.getItem('speakeasy-guest');
-    if (savedGuest) {
-      try {
-        const parsed = JSON.parse(savedGuest);
-        if (parsed.language) {
-          setLanguage(parsed.language);
-        }
-      } catch {}
-    }
-  }, []);
 
   const handleJoin = () => {
     if (!name.trim()) {
@@ -75,8 +74,8 @@ export default function GuestJoin() {
     }
     // Store guest info locally so the call page can use it
     localStorage.setItem("speakeasy-guest", JSON.stringify({ displayName: name.trim(), language, isGuest: true }));
-    // Save settings for the call page
-    localStorage.setItem("speakeasy-settings", JSON.stringify({ yourLanguage: language, partnerLanguage: "en" }));
+    // Save settings — guest's own language + host's language as partner
+    localStorage.setItem("speakeasy-settings", JSON.stringify({ yourLanguage: language, partnerLanguage: hostLang }));
     navigate(`/call/${roomId}`);
   };
 
