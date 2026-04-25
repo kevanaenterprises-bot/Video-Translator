@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import turtleLogo from "@assets/generated_images/Girl_turtle_talking_on_phone_d147f854.png";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Phone, Users, Heart, Shuffle, Copy, UserCircle, BookUser, Plus, Trash2, Share2, LogOut, MessageSquare, ShieldCheck } from "lucide-react";
+import { Phone, Users, Heart, Shuffle, Copy, UserCircle, BookUser, Plus, Trash2, Share2, LogOut, MessageSquare, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 // ── Language configs ──────────────────────────────────────────────────────────
@@ -173,8 +173,8 @@ function AddContactModal({ onAdd, onClose }: { onAdd: (c: Contact) => void; onCl
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-sm">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-sm bg-background border shadow-xl">
         <CardHeader>
           <CardTitle>Add Contact</CardTitle>
           <CardDescription>Save someone to your SpeakEasy phonebook</CardDescription>
@@ -457,25 +457,39 @@ export default function Home() {
 
         {/* Phonebook */}
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <BookUser className="w-5 h-5" />
-                My Phonebook
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowAddContact(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Add
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowPhonebook(!showPhonebook)}>
-                  {showPhonebook ? "Hide" : "Show"}
-                </Button>
+          <button
+            className="w-full text-left"
+            onClick={() => setShowPhonebook(!showPhonebook)}
+          >
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <BookUser className="w-5 h-5" />
+                  My Phonebook
+                  {contacts.length > 0 && (
+                    <span className="text-xs font-normal bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                      {contacts.length}
+                    </span>
+                  )}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="inline-flex items-center gap-1 text-xs border border-border rounded px-2 py-1 hover:bg-muted transition-colors"
+                    onClick={e => { e.stopPropagation(); setShowAddContact(true); }}
+                    onKeyDown={e => e.key === 'Enter' && (e.stopPropagation(), setShowAddContact(true))}
+                  >
+                    <Plus className="w-3 h-3" /> Add
+                  </div>
+                  {showPhonebook ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                </div>
               </div>
-            </div>
-            <CardDescription>
-              Tap <Share2 className="w-3 h-3 inline" /> to send them the room code in their language
-            </CardDescription>
-          </CardHeader>
+              <CardDescription>
+                Tap <Share2 className="w-3 h-3 inline" /> to send them the room code in their language
+              </CardDescription>
+            </CardHeader>
+          </button>
 
           {showPhonebook && (
             <CardContent className="pt-0">
@@ -487,7 +501,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {contacts.map(contact => (
+                  {[...contacts].sort((a, b) => a.name.localeCompare(b.name)).map(contact => (
                     <div key={contact.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-lg">
